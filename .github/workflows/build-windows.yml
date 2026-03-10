@@ -21,6 +21,10 @@ jobs:
         uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2.18.0
         with:
           channel: stable
+          flutter-version: "3.38.9"
+
+      - name: Verify Flutter version
+        run: flutter --version
 
       - name: Get version from pubspec
         id: get_version
@@ -28,26 +32,31 @@ jobs:
         run: |
           VERSION=$(grep 'version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Create Windows project files
-        run: flutter create --platforms=windows .
+        run: flutter create --platforms=windows --no-pub .
 
       - name: Build Windows release
-        run: flutter build windows --release
+        run: flutter build windows --release --verbose
 
-      - name: Create release archive
+      - name: Verify build output
         shell: pwsh
         run: |
-          $src = "build\windows\x64\runner\Release"
-          $dest = "apidash-windows-x64.zip"
-          Compress-Archive -Path "$src\*" -DestinationPath $dest
+          $exePath = "build\windows\x64\runner\Release\apidash.exe"
+          if (-Not (Test-Path $exePath)) {
+            Write-Error "Build failed: apidash.exe not found at $exePath"
+            exit 1
+          }
+          $size = (Get-Item $exePath).Length / 1MB
+          Write-Output "apidash.exe found — size: $([math]::Round($size, 2)) MB"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: apidash-windows-x64-${{ steps.get_version.outputs.version }}
-          path: apidash-windows-x64.zip
+          path: build\windows\x64\runner\Release\
           retention-days: 30
